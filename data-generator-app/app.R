@@ -4,75 +4,7 @@ library(dplyr)
 library(ggplot2)
 library(DT)
 
-# Helper function to generate synthetic data
-generate_spidey_data <- function(n_rows,
-                                 weather_effect,
-                                 crew_size_effect,
-                                 hour_effect) {
-  
-  # Convert 0-5 scale to 0-0.5 effect size
-  weather_effect <- weather_effect * 0.1
-  crew_size_effect <- crew_size_effect * 0.1
-  hour_effect <- hour_effect * 0.1
-  
-  # Base data generation
-  villains <- c("Green Goblin", "Doc Ock", "Vulture", "Mysterio", "Electro", "Sandman")
-  boroughs <- c("Manhattan", "Brooklyn", "Queens", "Bronx", "Staten Island")
-  weather <- c("Clear", "Cloudy", "Rainy", "Stormy", "Snowy")
-  
-  # Skew Weather to mostly clear
-  weather_weights <- c(4, 2, 1.5, 1, 1)
-  
-  # Skew Crew size to smaller crews
-  crew_weights <- c(5, 4, 3, 2, 1, rep(0.5, 15))
-  
-  data <- data.frame(
-    villain = sample(villains, n_rows, replace = TRUE),
-    borough = sample(boroughs, n_rows, replace = TRUE),
-    weather = sample(weather, n_rows, replace = TRUE, prob = weather_weights),
-    hour = sample(0:23, n_rows, replace = TRUE),  # 24-hour format
-    crew_size = sample(1:20, n_rows, replace = TRUE, prob = crew_weights)
-  )
-  
-  # Calculate base probability of thwarting crime
-  thwart_prob <- 0.75
-  
-  # Weather effect (harder in bad weather)
-  weather_modifier <- ifelse(
-    data$weather %in% c("Rainy", "Stormy", "Snowy"),
-    -weather_effect,
-    0
-  )
-  
-  # Crew size effect (harder with larger crews)
-  crew_modifier <- -crew_size_effect * (data$crew_size / 20)
-  
-  # Time of day effect (harder at night)
-  # Define night hours (20:00 - 04:00)
-  time_modifier <- ifelse(
-    data$hour >= 20 | data$hour <= 4,
-    -hour_effect,
-    0
-  )
-  
-  # Borough effect (better in Queens - home turf advantage)
-  borough_modifier <- ifelse(data$borough == "Queens", 0.1, 0)
-  
-  # Some villains are harder than others!
-  villain_modifier <- ifelse(
-    data$villain %in% c("Green Goblin", "Doc Ock"), -0.2, 0
-  )
-  
-  # Calculate final probability
-  final_prob <- pmax(0.1, pmin(0.9,  # Keep between 10% and 90%
-                               thwart_prob + weather_modifier + crew_modifier + time_modifier + borough_modifier + villain_modifier
-  ))
-  
-  # Generate thwarted outcome
-  data$thwarted <- rbinom(n_rows, 1, final_prob) == 1
-  
-  return(data)
-}
+source("functions.R")
 
 ui <- page_sidebar(
   title = div(
@@ -126,6 +58,8 @@ ui <- page_sidebar(
     ),
     actionButton("generate", "Generate Data", class = "btn-primary"),
     br(),
+    checkboxInput("dirty_data", "Introduce spelling erros and NA values?", FALSE),
+    uiOutput("error_freq_ui"),
     downloadButton("download_data", "Download Data (CSV)", class = "btn-secondary")
   ),
   
@@ -170,13 +104,35 @@ server <- function(input, output, session) {
     spidey_data()
   })
   
+  # Modified data based on dirty checkbox
+  modified_data <- reactive({
+      if (input$dirty_data) {
+        d_data <- introduce_character_errors(spidey_data(), 
+                                             c("villain", "borough", "weather"), 
+                                             misspelling_prob = input$error_freq, missing_prob = input$error_freq)
+        d_data <- d_data |> 
+          modify_numeric_column("hour", out_of_range_prob = input$error_freq, missing_prob = input$error_freq)
+        d_data
+      } else {
+    spidey_data()
+      }
+  })
+  
+  # Reactive UI for error/NA frequency
+  output$error_freq_ui <- renderUI({
+    if (input$dirty_data) {
+      numericInput("error_freq", "Frequency to add dirty values", 
+                   value = 0.001, min = 0, max = 1)
+    }
+  })
+  
   # Download Handler
   output$download_data <- downloadHandler(
     filename = function() {
       paste0("spidey-data-", format(Sys.time(), "%Y%m%d-%H%M%S"), ".csv")
     },
     content = function(file) {
-      data <- spidey_data()
+      data <- modified_data()
       write.csv(data, file, row.names = FALSE)
     }
   )
@@ -201,7 +157,7 @@ server <- function(input, output, session) {
       summarize(success_rate = mean(thwarted))
     
     ggplot(data, aes(x = hour, y = success_rate)) +
-      geom_line(color = "blue", size = 1) +
+      geom_line(color = "blue", linewidth = 1) +
       geom_point(color = "red", size = 3) +
       theme_minimal() +
       labs(x = "Hour of Day", y = "Success Rate") +
