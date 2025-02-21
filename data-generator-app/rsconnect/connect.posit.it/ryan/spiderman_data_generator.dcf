@@ -1,0 +1,12 @@
+name: spiderman_data_generator
+title: Spiderman Data Generator
+username: ryan
+account: ryan
+server: connect.posit.it
+hostUrl: https://connect.posit.it/__api__
+appId: 13741
+bundleId: 680247
+url: https://connect.posit.it/content/db4e318b-2eef-4677-b6f7-37447b844439/
+version: 1
+asMultiple: FALSE
+asStatic: FALSE
