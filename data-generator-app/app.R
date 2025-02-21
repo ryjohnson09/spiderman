@@ -58,7 +58,17 @@ ui <- page_sidebar(
     ),
     actionButton("generate", "Generate Data", class = "btn-primary"),
     br(),
-    checkboxInput("dirty_data", "Introduce spelling erros and NA values?", FALSE),
+    tooltip(
+      checkboxInput("dirty_data", "Make data dirty?", FALSE),
+      "Erros include:",
+      htmltools::tags$br(),
+      "Misspelling of villains, boroughs, weather",
+      htmltools::tags$br(),
+      "Time values outside of 0-23",
+      htmltools::tags$br(),
+      "NA values introduced",
+      placement = "right"
+    ),
     uiOutput("error_freq_ui"),
     downloadButton("download_data", "Download Data (CSV)", class = "btn-secondary")
   ),
